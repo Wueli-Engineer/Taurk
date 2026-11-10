@@ -12,8 +12,17 @@ async function api(path, payload) {
   });
   let data = {};
   try { data = await res.json(); } catch {}
-  if (!res.ok) { const e = new Error(data.error || "The server didn't answer. Check your connection and try again."); e.status = res.status; throw e; }
+  if (!res.ok) { const e = new Error(errorText(res.status, data)); e.status = res.status; throw e; }
   return data;
+}
+
+// Our own API answers {error: "text"}; Vercel's firewall and platform answer with other shapes.
+function errorText(status, data) {
+  if (data && typeof data.error === "string") return data.error;
+  if (status === 429) return "Too many attempts. Wait a minute, then try again.";
+  if (status >= 500) return "The server had a problem. Try again in a moment.";
+  const inner = data && data.error && typeof data.error.message === "string" ? data.error.message : "";
+  return inner || "The server didn't answer. Check your connection and try again.";
 }
 
 // Balances can hold fractions (62.5); show at most two decimals, none when whole.
