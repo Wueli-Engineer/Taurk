@@ -11,7 +11,7 @@ const { db } = await import("../lib/db.js");
 const { RULES } = await import("../lib/config.js");
 
 const join = async (name) => userFor((await signup({ username: name, email: name + "@example.com", password: "password123" })).token);
-const balance = async (u) => (await (await db()).query("SELECT balance FROM users WHERE id = $1", [u.id])).rows[0].balance;
+const balance = async (u) => Number((await (await db()).query("SELECT balance FROM users WHERE id = $1", [u.id])).rows[0].balance);
 const status = async (id) => (await (await db()).query("SELECT status, refund FROM edits WHERE id = $1", [id])).rows[0];
 const current = async () => { const s = await core.getState(null); return { v: s.version, code: s.code }; };
 const rejects = (p, re) => assert.rejects(p, (e) => re.test(e.message));
@@ -49,7 +49,7 @@ test("the whole lifecycle", async () => {
   let c = await current();
   assert.equal(c.code, "a\nB!\nc\nd\ne\nf\ng\n");
   assert.equal((await status(eClash.id)).status, "conflict", "same line as the approved edit");
-  assert.equal((await status(eClash.id)).refund, Math.floor(eClash.cost / 2));
+  assert.equal(Number((await status(eClash.id)).refund), eClash.cost / 2);
   assert.equal((await status(eF.id)).status, "pending", "far-away edit survives");
 
   await core.decide(owner, eF.id, true);
@@ -63,7 +63,7 @@ test("the whole lifecycle", async () => {
   const before = await balance(bob);
   const eD = await core.submitEdit(bob, { baseVersion: c.v, code: c.code + "zz\n" });
   await core.decide(owner, eD.id, false);
-  assert.equal(await balance(bob), before - eD.cost + Math.floor(eD.cost / 2));
+  assert.equal(await balance(bob), before - eD.cost + eD.cost / 2);
 
   // Withdrawal refunds half too, and only the author may withdraw.
   const eW = await core.submitEdit(carol, { baseVersion: c.v, code: c.code + "w\n" });
@@ -89,11 +89,27 @@ test("the whole lifecycle", async () => {
   assert.equal(s.pending.find((p) => p.id === pass.id).yes, wA);
 
   await (await db()).query("UPDATE edits SET closes_at = now() - interval '1 second' WHERE status = 'pending'");
-  s = await core.getState(null);
+  s = await core.getState(null, "");
   assert.equal(s.pending.length, 0);
   assert.equal((await status(pass.id)).status, "approved");
   assert.equal((await status(fail.id)).status, "denied");
   assert.equal(s.code, c.code + "p\n");
+
+  // Odd-sized edits earn half characters: 50 - 25 + 25 + 12.5 = 62.5, and fractions can be spent around.
+  await core.setMode(owner, "owner");
+  const dave = await join("dave");
+  const s2 = await core.getState(null, "");
+  const e25 = await core.submitEdit(dave, { baseVersion: s2.version, code: s2.code + "<h1>Hello, strangers</h1>" });
+  assert.equal(e25.cost, 25);
+  await core.decide(owner, e25.id, true);
+  assert.equal(await balance(dave), 62.5);
+  assert.equal((await core.getState(dave, "")).me.balance, 62.5);
+  const s3 = await core.getState(null, "");
+  await rejects(core.submitEdit(dave, { baseVersion: s3.version, code: s3.code + "x".repeat(63) }), /balance of 62.5 characters/);
+  const e62 = await core.submitEdit(dave, { baseVersion: s3.version, code: s3.code + "x".repeat(62) });
+  assert.equal(await balance(dave), 0.5);
+  await core.decide(owner, e62.id, false);
+  assert.equal(await balance(dave), 31.5);
 
   // Taking approval back.
   await core.setMode(owner, "owner");

@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test test/core.test.mjs"
+    "test": "node --test test/core.test.mjs test/migrate.test.mjs"
   },
   "dependencies": {
     "diff": "8.0.4",

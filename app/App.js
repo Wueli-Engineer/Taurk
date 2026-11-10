@@ -16,6 +16,9 @@ async function api(path, payload) {
   return data;
 }
 
+// Balances can hold fractions (62.5); show at most two decimals, none when whole.
+const chars = (n) => String(Math.round(Number(n) * 100) / 100);
+
 function ago(iso) {
   if (!iso) return "";
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -169,7 +172,7 @@ export default function App() {
         <div className="who">
           {me ? (
             <>
-              <span className="balance num" title="Your character balance">{me.balance} chars</span>
+              <span className="balance num" title="Your character balance">{chars(me.balance)} chars</span>
               <span className="small">{me.username}{me.isOwner ? " · owner" : ""}</span>
               <button className="btn quiet small" onClick={() => act(() => api("/api/auth", { action: "logout" }))}>Log out</button>
             </>
@@ -228,7 +231,7 @@ export default function App() {
                 <>
                   <span className="add-t">+{m.added}</span>
                   <span className="del-t">−{m.deleted}{m.deleted ? ` ×${rules?.deleteMultiplier ?? 2}` : ""}</span>
-                  <span>= <b>{cost}</b>{me ? ` of your ${me.balance}` : ""}</span>
+                  <span>= <b>{cost}</b>{me ? ` of your ${chars(me.balance)}` : ""}</span>
                 </>
               )}
             </div>
@@ -286,7 +289,7 @@ export default function App() {
                 <h3>Your decided edits</h3>
                 <ul className="plain small">
                   {s.mine.map((x) => (
-                    <li key={x.id} className="num">#{x.id} {x.status === "conflict" ? "closed (overlapped a newer change)" : x.status} · {x.refund >= x.cost ? `+${x.refund - x.cost} earned` : `${x.refund} of ${x.cost} back`} · {ago(x.at)}</li>
+                    <li key={x.id} className="num">#{x.id} {x.status === "conflict" ? "closed (overlapped a newer change)" : x.status} · {x.refund >= x.cost ? `+${chars(x.refund - x.cost)} earned` : `${chars(x.refund)} of ${x.cost} back`} · {ago(x.at)}</li>
                   ))}
                 </ul>
               </>
